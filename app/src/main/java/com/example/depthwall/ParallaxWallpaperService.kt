@@ -1,6 +1,9 @@
 package com.example.depthwall
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.*
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -10,6 +13,7 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
 import android.widget.Toast
@@ -29,7 +33,7 @@ class ParallaxWallpaperService : WallpaperService() {
         private val FG_MOVE_X = 0.115f
         private val FG_MOVE_Y = 0.085f
         private val SMOOTHING = 0.16f
-        private val FROZEN_ZOOM = 1.15f
+        private val FROZEN_ZOOM = 1f
         private val DEPTH_X = 0.09f
         private val DEPTH_Y = 0.06f
         private val MESH_W = 16
@@ -61,6 +65,48 @@ class ParallaxWallpaperService : WallpaperService() {
         private var fgStamp = Long.MIN_VALUE
         private var bgLoadedSize = -1L
         private var fgLoadedSize = -1L
+        private val prefs = getSharedPreferences("depthwall", Context.MODE_PRIVATE)
+        private var enable3d = true
+        private var gen = 0
+        private var lastRestart = 0L
+
+        private val screenReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                restartVideoFromStart()
+            }
+        }
+
+        override fun onCreate(surfaceHolder: SurfaceHolder) {
+            super.onCreate(surfaceHolder)
+            try {
+                val f = IntentFilter().apply {
+                    addAction(Intent.ACTION_SCREEN_ON)
+                    addAction(Intent.ACTION_USER_PRESENT)
+                }
+                registerReceiver(screenReceiver, f)
+            } catch (e: Exception) {}
+        }
+
+        // Phát lại video từ đầu mỗi khi bật màn hình
+        private fun restartVideoFromStart() {
+            val video = File(filesDir, "bg.mp4")
+            if (!(video.exists() && video.length() > 0L)) return
+            val now = SystemClock.uptimeMillis()
+            if (now - lastRestart < 800L) return
+            lastRestart = now
+            gen++
+            handler.removeCallbacks(watchdog)
+            handler.removeCallbacks(frame)
+            stopVideo()
+            videoMode = true
+            videoCompleted = false
+            videoFailed = false
+            renderingStarted = false
+            capturing = false
+            lastFrame?.recycle()
+            lastFrame = null
+            startOrRefreshContent(surfaceHolder)
+        }
 
         private fun isFrozen(): Boolean = videoMode && videoCompleted && lastFrame != null
 
@@ -120,24 +166,13 @@ class ParallaxWallpaperService : WallpaperService() {
             wasVisible = v
             visible = v
             if (v) {
+                enable3d = prefs.getBoolean("enable3d", true)
                 loadImages()
                 sensor?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
 
                 // Mỗi lần màn hình quay lại hình nền, phát video lại từ đầu.
                 // Khi video kết thúc, ảnh khung cuối vẫn đứng yên cho tới lần mở tiếp theo.
-                if (becameVisible) {
-                    val video = File(filesDir, "bg.mp4")
-                    if (video.exists() && video.length() > 0L && videoMode) {
-                        handler.removeCallbacks(watchdog)
-                        stopVideo()
-                        videoCompleted = false
-                        videoFailed = false
-                        renderingStarted = false
-                        capturing = false
-                        lastFrame?.recycle()
-                        lastFrame = null
-                    }
-                }
+                if (becameVisible) restartVideoFromStart()
                 startOrRefreshContent(surfaceHolder)
             } else {
                 sm.unregisterListener(this)
@@ -148,6 +183,7 @@ class ParallaxWallpaperService : WallpaperService() {
         }
 
         override fun onDestroy() {
+            try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
             sm.unregisterListener(this)
             handler.removeCallbacks(frame)
             handler.removeCallbacks(watchdog)
@@ -163,7 +199,8 @@ class ParallaxWallpaperService : WallpaperService() {
             ty = ((e.values[1] - 6.0f) / 7.0f * DIR).coerceIn(-1f, 1f)
         }
         override fun onAccuracyChanged(s: Sensor?, a: Int) {}
-                private fun startOrRefreshContent(holder: SurfaceHolder) {
+
+        private fun startOrRefreshContent(holder: SurfaceHolder) {
             if (w <= 0 || h <= 0 || !holder.surface.isValid) return
             val video = File(filesDir, "bg.mp4")
             if (video.exists() && video.length() > 0L) {
@@ -256,6 +293,7 @@ class ParallaxWallpaperService : WallpaperService() {
         private fun captureLastFrame(file: File) {
             if (capturing) return
             capturing = true
+            val myGen = gen
             Thread {
                 var bmp: Bitmap? = null
                 val r = MediaMetadataRetriever()
@@ -278,6 +316,10 @@ class ParallaxWallpaperService : WallpaperService() {
                 }
                 val result = bmp
                 handler.post {
+                    if (myGen != gen) {
+                        result?.recycle()
+                        return@post
+                    }
                     capturing = false
                     if (videoMode) {
                         if (result != null) {
@@ -314,7 +356,8 @@ class ParallaxWallpaperService : WallpaperService() {
 
         private fun MediaPlayer.startSafely() { try { if (!isPlaying) start() } catch (e: Exception) {} }
         private fun MediaPlayer.pauseSafely() { try { if (isPlaying) pause() } catch (e: Exception) {} }
-                private fun loadImages() {
+
+        private fun loadImages() {
             if (w <= 0 || h <= 0) return
             val bgFile = File(filesDir, "bg.img")
             val fgFile = File(filesDir, "fg.img")
@@ -381,12 +424,14 @@ class ParallaxWallpaperService : WallpaperService() {
                     val u = j.toFloat() / MESH_W
                     val px = left + u * dw
                     val py = top + v * dh
+                    val edge = minOf(minOf(u, 1f - u), minOf(v, 1f - v))
+                    val fall = (edge / 0.15f).coerceIn(0f, 1f)
                     val nx = px / w - 0.5f
                     val ny = py / h - 0.5f
                     val depth = (1f - sqrt(nx * nx + ny * ny) * 1.6f).coerceIn(0f, 1f)
                     val k2 = depth - 0.45f
-                    meshVerts[k++] = px + cx * w * DEPTH_X * k2
-                    meshVerts[k++] = py + cy * h * DEPTH_Y * k2
+                    meshVerts[k++] = px + cx * w * DEPTH_X * k2 * fall
+                    meshVerts[k++] = py + cy * h * DEPTH_Y * k2 * fall
                 }
             }
             c.drawBitmapMesh(b, MESH_W, MESH_H, meshVerts, 0, null, 0, paint)
@@ -395,18 +440,28 @@ class ParallaxWallpaperService : WallpaperService() {
         private fun drawFrame() {
             if (w <= 0 || h <= 0) return
             if (videoMode && !isFrozen()) return
-            cx += (tx - cx) * SMOOTHING; cy += (ty - cy) * SMOOTHING
+            enable3d = prefs.getBoolean("enable3d", true)
+            val ttx = if (enable3d) tx else 0f
+            val tty = if (enable3d) ty else 0f
+            cx += (ttx - cx) * SMOOTHING; cy += (tty - cy) * SMOOTHING
             val holder = surfaceHolder
             val c = try { holder.lockCanvas() } catch (e: Exception) { null } ?: return
             try {
                 c.drawColor(Color.BLACK)
                 val frozen = lastFrame
                 if (videoMode && frozen != null) {
-                    drawDepthImage(c, frozen)
+                    if (enable3d) drawDepthImage(c, frozen)
+                    else c.drawBitmap(frozen, matrixFor(frozen, 0f, 0f, 1f), paint)
                 } else {
-                    bg?.let { drawLayer(c, it, -cx * w * BG_MOVE_X, -cy * h * BG_MOVE_Y, BG_ZOOM) }
+                    bg?.let {
+                        if (enable3d) drawLayer(c, it, -cx * w * BG_MOVE_X, -cy * h * BG_MOVE_Y, BG_ZOOM)
+                        else drawLayer(c, it, 0f, 0f, 1f)
+                    }
                 }
-                fg?.let { drawForegroundMax(c, it, cx * w * FG_MOVE_X, cy * h * FG_MOVE_Y) }
+                fg?.let {
+                    if (enable3d) drawForegroundMax(c, it, cx * w * FG_MOVE_X, cy * h * FG_MOVE_Y)
+                    else drawLayer(c, it, 0f, 0f, 1f)
+                }
             } catch (e: Exception) {
             } finally {
                 try { holder.unlockCanvasAndPost(c) } catch (e: Exception) {}
