@@ -57,4 +57,17 @@
 
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/switch3d"
-            android:layout_wid
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:checked="true"
+            android:text="Bật hiệu ứng 3D" />
+
+        <Button
+            android:id="@+id/btnSet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="4. XEM TRƯỚC / ĐẶT HÌNH NỀN VIP MAX" />
+    </LinearLayout>
+</ScrollView>
