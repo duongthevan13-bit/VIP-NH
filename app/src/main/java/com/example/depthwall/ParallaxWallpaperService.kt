@@ -80,4 +80,111 @@ class ParallaxWallpaperService : WallpaperService() {
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
             try {
-                v
+                val f = IntentFilter().apply {
+                    addAction(Intent.ACTION_SCREEN_ON)
+                    addAction(Intent.ACTION_USER_PRESENT)
+                }
+                registerReceiver(screenReceiver, f)
+            } catch (e: Exception) {}
+        }
+
+        // Phát lại video từ đầu mỗi khi bật màn hình
+        private fun restartVideoFromStart() {
+            val video = File(filesDir, "bg.mp4")
+            if (!(video.exists() && video.length() > 0L)) return
+            val now = SystemClock.uptimeMillis()
+            if (now - lastRestart < 800L) return
+            lastRestart = now
+            gen++
+            handler.removeCallbacks(watchdog)
+            handler.removeCallbacks(frame)
+            stopVideo()
+            videoMode = true
+            videoCompleted = false
+            videoFailed = false
+            renderingStarted = false
+            capturing = false
+            lastFrame?.recycle()
+            lastFrame = null
+            startOrRefreshContent(surfaceHolder)
+        }
+
+        private fun isFrozen(): Boolean = videoMode && videoCompleted && lastFrame != null
+
+        private fun toast(msg: String) {
+            try { Toast.makeText(applicationContext, msg, Toast.LENGTH_LONG).show() } catch (e: Exception) {}
+        }
+
+        private val frame = object : Runnable {
+            override fun run() {
+                if (!visible) return
+                if (videoMode && !isFrozen()) return
+                drawFrame()
+                handler.postDelayed(this, 33L)
+            }
+        }
+
+        // Neu sau 4 giay video chua hien hinh -> dung khung hinh cuoi
+        private val watchdog = Runnable {
+            val f = currentVideo
+            if (mediaPlayer != null && !renderingStarted && !videoCompleted && f != null) {
+                toast("Video không hiển thị được, dùng khung hình cuối")
+                videoCompleted = true
+                captureLastFrame(f)
+            }
+        }
+
+        private fun scheduleWatchdog() {
+            handler.removeCallbacks(watchdog)
+            if (!renderingStarted) handler.postDelayed(watchdog, 4000L)
+        }
+
+        private fun startLoop() {
+            handler.removeCallbacks(frame)
+            if (visible) handler.post(frame) else drawFrame()
+        }
+
+        override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+            super.onSurfaceChanged(holder, format, width, height)
+            w = width; h = height
+            loadImages()
+            startOrRefreshContent(holder)
+        }
+
+        override fun onSurfaceCreated(holder: SurfaceHolder) {
+            super.onSurfaceCreated(holder)
+            startOrRefreshContent(holder)
+        }
+
+        override fun onSurfaceDestroyed(holder: SurfaceHolder) {
+            handler.removeCallbacks(watchdog)
+            stopVideo()
+            super.onSurfaceDestroyed(holder)
+        }
+
+        override fun onVisibilityChanged(v: Boolean) {
+            val becameVisible = v && !wasVisible
+            wasVisible = v
+            visible = v
+            if (v) {
+                enable3d = prefs.getBoolean("enable3d", true)
+                loadImages()
+                sensor?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+
+                // Mỗi lần màn hình quay lại hình nền, phát video lại từ đầu.
+                // Khi video kết thúc, ảnh khung cuối vẫn đứng yên cho tới lần mở tiếp theo.
+                if (becameVisible) restartVideoFromStart()
+                startOrRefreshContent(surfaceHolder)
+            } else {
+                sm.unregisterListener(this)
+                handler.removeCallbacks(frame)
+                handler.removeCallbacks(watchdog)
+                if (playerPrepared) mediaPlayer?.pauseSafely()
+            }
+        }
+
+        override fun onDestroy() {
+            try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
+            sm.unregisterListener(this)
+            handler.removeCallbacks(frame)
+            handler.removeCallbacks(watchd
