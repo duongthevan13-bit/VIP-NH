@@ -23,6 +23,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        val prefs = getSharedPreferences("depthwall", MODE_PRIVATE)
+        val sw = findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch3d)
+        sw.isChecked = prefs.getBoolean("enable3d", true)
+        sw.setOnCheckedChangeListener { _, on ->
+            prefs.edit().putBoolean("enable3d", on).apply()
+        }
+
         findViewById<Button>(R.id.btnBg).setOnClickListener { pickBg.launch("image/*") }
         findViewById<Button>(R.id.btnFg).setOnClickListener { pickFg.launch("image/*") }
         findViewById<Button>(R.id.btnVideo).setOnClickListener { pickVideo.launch("video/*") }
