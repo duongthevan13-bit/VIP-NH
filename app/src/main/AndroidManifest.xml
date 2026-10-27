@@ -1,39 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center">
 
-    <uses-feature
-        android:name="android.software.live_wallpaper"
-        android:required="true" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="DEPTHWALL VIP MAX"
+            android:textStyle="bold"
+            android:textSize="25sp"
+            android:gravity="center"
+            android:paddingBottom="8dp" />
 
-    <application
-        android:allowBackup="true"
-        android:icon="@android:drawable/sym_def_app_icon"
-        android:label="Depth Wallpaper"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.DayNight.DarkActionBar">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ảnh: parallax 3D • Video: dừng ở khung hình cuối"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:paddingBottom="20dp" />
 
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+        <Button
+            android:id="@+id/btnBg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="1. Chọn ảnh HẬU CẢNH" />
 
-        <service
-            android:name=".ParallaxWallpaperService"
-            android:exported="true"
-            android:label="Depth Wallpaper"
-            android:permission="android.permission.BIND_WALLPAPER">
-            <intent-filter>
-                <action android:name="android.service.wallpaper.WallpaperService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.service.wallpaper"
-                android:resource="@xml/wallpaper" />
-        </service>
+        <Button
+            android:id="@+id/btnVideo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="2. Chọn VIDEO làm hình nền động" />
 
-    </application>
+        <Button
+            android:id="@+id/btnFg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="3. Chọn chủ thể PNG ĐÃ TÁCH NỀN (nổi 3D)" />
 
-</manifest>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Mẹo để nổi 3D tối đa: dùng ảnh chủ thể PNG nền trong suốt, tách nền thật sạch và chọn hậu cảnh khác với chủ thể."
+            android:textSize="13sp"
+            android:paddingTop="12dp"
+            android:paddingBottom="8dp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch3d"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:checked="true"
+            android:text="Bật hiệu ứng 3D" />
+
+        <Button
+            android:id="@+id/btnSet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="4. XEM TRƯỚC / ĐẶT HÌNH NỀN VIP MAX" />
+    </LinearLayout>
+</ScrollView>
